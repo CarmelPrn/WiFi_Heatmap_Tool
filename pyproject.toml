@@ -1,0 +1,14 @@
+[project]
+version = "0.1"
+requires-python = ">= 3.11"
+name = "wifi-project"
+dependencies = [
+    "pyqtgraph>=0.13.7",
+    "PyQt6>=6.10.0",
+    "pywifi>=1.1.12",
+    "numpy>=2.3.3",
+    "pillow>=12.0.0",
+    "py-wifi-helper>=2.0.4",
+    "lswifi>=0.1.56",
+    "scipy>=1.15.2"
+]
