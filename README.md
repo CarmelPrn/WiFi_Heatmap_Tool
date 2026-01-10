@@ -5,13 +5,17 @@ Rakendus on mõeldud kasutamiseks Windowsi operatsioonisüsteemis.
 
 ## Nõuded
 
-Rakenduse käivitamiseks on vajalik:
+Rakenduse käivitamise eelduseks on vajalik:
 
 - **Windowsi operatsioonisüsteem**
 - **Python 3.11+**
 
 Pythonit on võimalik alla laadida aadressilt:
 https://www.python.org/downloads/
+
+## Rakenduse käivitamine
+1. Lae alla projekti kaust
+2. Käivita kaustas olev `run.bat` fail
 
 ## Projekti struktuur
 
