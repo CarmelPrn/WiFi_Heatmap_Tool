@@ -30,22 +30,37 @@ class SetMapScale(baseclass, uiclass):
         self.buttonBox.rejected.connect(self.reject)
 
     def set_scale(self):
-        self.LengthInMeters.value()
-        self.LengthInPixels.value()
-        self.Scale.setValue(self.LengthInMeters.value() / self.LengthInPixels.value())
+        meters = self.LengthInMeters.value()
+        pixels = self.LengthInPixels.value()
+        if pixels <= 0:
+            self.Scale.setValue(0)
+            return
+        self.Scale.setValue(meters / pixels)
 
     def accept(self):
-        for ui_point in self.parent.map_scale_ui_points:
-            self.parent.graphWidget.removeItem(ui_point)
+        if len(self.parent.map_scale_markers) < 2:
+            self.Scale.setValue(0)
+            return
+        if self.LengthInPixels.value() <= 0:
+            return
+        
         self.parent.scale = self.Scale.value()
+        self.parent.actionCapture.setEnabled(True)
         self.parent.disconnect_measure_distance()
+        for marker in self.parent.map_scale_markers:
+            self.parent.graphWidget.removeItem(marker)
+        self.parent.map_scale_markers.clear()
         super().accept()
 
 
     def reject(self):
-        for ui_point in self.parent.map_scale_ui_points:
-            self.parent.graphWidget.removeItem(ui_point)
+
         self.parent.disconnect_measure_distance()
+        self.parent.scale = None
+        self.parent.actionCapture.setEnabled(False)
+        for marker in self.parent.map_scale_markers:
+            self.parent.graphWidget.removeItem(marker)
+        self.parent.map_scale_markers.clear()
         super().reject()
 
 

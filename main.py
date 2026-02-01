@@ -3,10 +3,12 @@ from pathlib import Path
 import os
 import numpy as np
 import pyqtgraph as pg
+from pyqtgraph.exporters import ImageExporter
 from PIL import Image
 from PyQt6 import QtWidgets
 from PyQt6.QtCore import QResource, QTimer, QProcess, Qt, QDir
 from PyQt6.QtWidgets import QFileDialog, QApplication, QTableWidgetItem, QHeaderView, QListWidgetItem
+from PyQt6.QtGui import QIcon
 import math
 import json
 from map_scale import SetMapScale
@@ -38,22 +40,25 @@ class MainWindow(uiclass, baseclass):
         base_dir = Path(__file__).resolve().parent
         self.temp_json_path = str((base_dir / "temp.json").resolve())
         self.image_item = None
-        QResource.registerResource(f"{base_dir}/resources.rcc")
 
         self.setupUi(self)
+        self.actionNew.setIcon(QIcon(resource_path("icons/new.svg")))
+        self.actionCapture.setIcon(QIcon(resource_path("icons/capture.svg")))
+        self.actionStop.setIcon(QIcon(resource_path("icons/stop.svg")))
+        self.actionExport.setIcon(QIcon(resource_path("icons/export-csv.svg")))
+        self.actionExportScreenshot.setIcon(QIcon(resource_path("icons/export_screenshot.svg")))
         self.bannerFrame.hide()
         self._plot_click_connected = False
         self.clickable_toggle(False)
         self.initial_actions_state()
         self.actionNew.triggered.connect(self.open_file_dialog)
         self.actionExport.triggered.connect(self.save_csv_dialog)
-
+        self.actionExportScreenshot.triggered.connect(self.save_screenshot_dialog)
         self.actionCapture.triggered.connect(self.on_capture_clicked)
         self.scan_location_marker = None
         self.settings_window = None
         self.scan_results = []
-        self.map_scale_points = []
-        self.map_scale_ui_points = []
+        self.map_scale_markers = []
         self.map_ui_markers = []
         #https://doc.qt.io/qtforpython-6/tutorials/basictutorial/tablewidget.html
         self.tableWidget.setColumnCount(len(UI_COLUMNS))
@@ -85,7 +90,7 @@ class MainWindow(uiclass, baseclass):
         self.heatmap_item = None
         self.heatmap_items = {}
         self.listSSID.itemChanged.connect(self.list_changed)
-        self.colorbar = False
+        self.colorbar = None
 
     def closeEvent(self, event):
         try:
@@ -100,11 +105,11 @@ class MainWindow(uiclass, baseclass):
         any_ssid_checked = False
         if self._scan_running:
             return
-        bssid = item.data(Qt.ItemDataRole.UserRole)
+        bssid_list = item.data(Qt.ItemDataRole.UserRole)
         key = item.text()
         if item.checkState() == Qt.CheckState.Checked:
             any_ssid_checked = True
-            self.plot_wifi_heatmap_griddata(bssid=bssid, key=key)
+            self.plot_wifi_heatmap_griddata(bssid_list=bssid_list, key=key)
         else:
             if key in self.heatmap_items:
                 self.graphWidget.removeItem(self.heatmap_items[key])
@@ -114,15 +119,16 @@ class MainWindow(uiclass, baseclass):
             self.bannerFrame.hide()
 
     def passive_wifi_scan(self):
-        if self._scan_running:
-            return
+         if self._scan_running:
+             return
         
     
-        p = Path(self.temp_json_path)
-        if p.exists():
-            p.unlink()
-        self._scan_running = True
-        self.proc.start("lswifi", ["--json", self.temp_json_path])
+         p = Path(self.temp_json_path)
+         if p.exists():
+             p.unlink()
+         self._scan_running = True
+         self.proc.start("lswifi.exe", ["--json", self.temp_json_path])
+
 
     def on_scan_finished(self):
         self._scan_running = False
@@ -166,15 +172,33 @@ class MainWindow(uiclass, baseclass):
 
 
     def open_settings(self):
+
         self.clickable_toggle(False)
         self.settings_window = SetMapScale(self)
+        self.settings_window.setWindowModality(Qt.WindowModality.NonModal)
+        self.settings_window.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
         sig = self.graphWidget.scene().sigMouseClicked
+        try: 
+            sig.disconnect(self.measure_distance)
+        except TypeError:
+            pass
         sig.connect(self.measure_distance)
 
 
     def on_capture_clicked(self):
-        self.bannerLabel.setText("Click on your current location to start collecting data")
+        self.scan_results.clear()
+        self.latest_scan = []
+        self.tableWidget.clearContents()
+        self.listSSID.clear()
+        self.bannerFrame.hide()
+        for i in self.heatmap_items.values():
+            self.graphWidget.removeItem(i)
+        self.heatmap_items.clear()
+        self.colorbar = None
+        self.bannerLabel.setText("Click on your current location to start collecting data.\n" "Wi-Fi scan updates every 3 seconds.")
         self.bannerFrame.show()
         self.capture_state()
         self.clickable_toggle(True)
@@ -188,6 +212,7 @@ class MainWindow(uiclass, baseclass):
         self.bannerFrame.hide()
         self.statusBar().showMessage(f"Scan stopped")
         self.stopped_state()
+        self.remove_ui_markers()
 
 
         try:
@@ -204,6 +229,7 @@ class MainWindow(uiclass, baseclass):
 
         file_dialog.setLabelText(QFileDialog.DialogLabel.FileName, "Open Floor plan Image File")
         file_dialog.setFileMode(QtWidgets.QFileDialog.FileMode.ExistingFile)
+        file_dialog.setNameFilters({"Image files (*.png *.jpg)"})
         if file_dialog.exec():
             selected_files = file_dialog.selectedFiles()
             if selected_files:
@@ -223,6 +249,23 @@ class MainWindow(uiclass, baseclass):
                 writer.writerows(self.scan_results)
 
     def load_image(self, file_path):
+
+        self.scale = None
+        self.scan_results.clear()
+        self.latest_scan = []
+        self.tableWidget.clearContents()
+        self.listSSID.clear()
+        self.bannerFrame.hide()
+
+        for i in self.heatmap_items.values():
+            self.graphWidget.removeItem(i)
+        self.heatmap_items.clear()
+        self.colorbar = None
+        self.remove_ui_markers()
+
+        for m in self.map_scale_markers:
+            self.graphWidget.removeItem(m)
+        self.map_scale_markers.clear()
 
         img = Image.open(file_path).convert("RGB")
         self.image_array = np.array(img)
@@ -255,29 +298,29 @@ class MainWindow(uiclass, baseclass):
         y_pos = pos.y()
         if not self.is_click_within_bounds(x_pos=x_pos, y_pos=y_pos):
             return
-        if len(self.map_scale_points) >= 2:
-            self.map_scale_points = []
-            for ui_point in self.map_scale_ui_points:
-                self.graphWidget.removeItem(ui_point)
-            self.map_scale_ui_points = []
         
-        self.map_scale_points.append((x_pos, y_pos))
+        # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/targetitem.html
+        if len(self.map_scale_markers) < 2:
+            m = pg.TargetItem(pos=(x_pos, y_pos), movable=True, size=10, symbol='o', pen=pg.mkPen(color='g', width=1), brush=pg.mkBrush(color='g'))
+            self.graphWidget.addItem(m)
+            self.map_scale_markers.append(m)
+            m.sigPositionChanged.connect(self.update_marker_distance)
 
-        # https://pyqtgraph.readthedocs.io/en/latest/api_reference/graphicsItems/scatterplotitem.html
-        scan_location_marker = pg.ScatterPlotItem(
-            [x_pos], [y_pos],
-            symbol='o',
-            size=10,
-            pen=pg.mkPen(color='g', width=1),
-            brush=pg.mkBrush(color='g')
-        )
-        self.graphWidget.addItem(scan_location_marker)
-        self.map_scale_ui_points.append(scan_location_marker)
-        if len(self.map_scale_points) == 2:
-            x1,y1 = self.map_scale_points[0]
-            x2,y2 = self.map_scale_points[1]
-            self.distance = math.sqrt(((x2 - x1)**2) + ((y2 - y1)**2)) #https://www.cuemath.com/euclidean-distance-formula/
-            self.settings_window.LengthInPixels.setValue(int(self.distance))
+        self.update_marker_distance()
+        
+    def update_marker_distance(self):
+        if len(self.map_scale_markers) < 2:
+            return
+        
+        pos1 = self.map_scale_markers[0].pos()
+        pos2 = self.map_scale_markers[1].pos()
+
+        x = float(pos2.x() - pos1.x())
+        y = float(pos2.y() - pos1.y())
+        
+        self.distance = math.sqrt(x * x + y * y) # https://www.mathsisfun.com/pythagoras.html
+
+        self.settings_window.LengthInPixels.setValue(int(self.distance))
 
 
     def disconnect_measure_distance(self):
@@ -372,32 +415,44 @@ class MainWindow(uiclass, baseclass):
             self.graphWidget.removeItem(marker)
         self.map_ui_markers.clear()
 
+    def remove_map_scale_markers(self):
+        for marker in self.map_scale_markers:
+            self.graphWidget.removeItem(marker)
+        self.map_scale_markers.clear()
+
     def image_loaded_state(self):
         self.actionNew.setEnabled(True)
-        self.actionCapture.setEnabled(True)
+        self.actionCapture.setEnabled(False)
         self.actionStop.setEnabled(False)
         self.actionExport.setEnabled(False)
+        self.actionExportScreenshot.setEnabled(False)
 
     def capture_state(self):
         self.actionNew.setEnabled(True)
         self.actionCapture.setEnabled(False)
         self.actionStop.setEnabled(True)
         self.actionExport.setEnabled(False)
+        self.actionExportScreenshot.setEnabled(False)
 
     def initial_actions_state(self):
         self.actionNew.setEnabled(True)
         self.actionCapture.setEnabled(False)
         self.actionStop.setEnabled(False)
         self.actionExport.setEnabled(False)
+        self.actionExportScreenshot.setEnabled(False)
     
     def stopped_state(self):
         self.actionNew.setEnabled(True)
-        self.actionCapture.setEnabled(False)
+        if self.image_item is not None and self.scale is not None:
+            self.actionCapture.setEnabled(True)
+        else:
+            self.actionCapture.setEnabled(False)
         self.actionStop.setEnabled(False)
-        self.actionExport.setEnabled(True)
+        self.actionExport.setEnabled(bool(self.scan_results))
+        self.actionExportScreenshot.setEnabled(True)
 
 # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.griddata.html
-    def plot_wifi_heatmap_griddata(self, bssid, key):
+    def plot_wifi_heatmap_griddata(self, bssid_list, key):
         self.remove_ui_markers()
         self.bannerFrame.hide()
         unique_bssid_results = []
@@ -410,7 +465,7 @@ class MainWindow(uiclass, baseclass):
 
 
         for result in self.scan_results:
-            if result.get('bssid') in bssid:
+            if result.get('bssid') in bssid_list:
                 unique_bssid_results.append(result)
 
         if not self.scan_results or len(unique_bssid_results) < 3:
@@ -461,10 +516,19 @@ class MainWindow(uiclass, baseclass):
         self.graphWidget.addItem(heatmap_item)
         # https://pyqtgraph.readthedocs.io/en/pyqtgraph-0.13.0/colormap.html
 
-        if self.colorbar is False:
-            self.graphWidget.addColorBar(heatmap_item, colorMap=cmap, values=(RSSI_MIN, RSSI_MAX))
-            self.colorbar = True
+        if self.colorbar is None:
+            self.colorbar = pg.ColorBarItem(values=(RSSI_MIN, RSSI_MAX), colorMap=cmap, interactive=False)
+            self.colorbar.setImageItem(heatmap_item, insert_in=self.graphWidget.getPlotItem())
         self.heatmap_items[key] = heatmap_item
+
+    def save_screenshot_dialog(self):
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save screenshot", QDir.currentPath(), "Image files (*.png *.jpg)")
+        if not filename:
+            return
+        #exporter = ImageExporter(self.graphWidget.scene())
+        #exporter.export(filename)
+        pic = self.grab()
+        pic.save(filename)
 
 
 
