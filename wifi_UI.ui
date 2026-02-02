@@ -148,7 +148,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
   <action name="actionNew">
    <property name="icon">
     <iconset resource="resources.qrc">
-     <normaloff>:/icons/icons/new.svg</normaloff>:/icons/icons/new.svg</iconset>
+     <normaloff>:/icons/icons/new_1.svg</normaloff>:/icons/icons/new_1.svg</iconset>
    </property>
    <property name="text">
     <string>New</string>
@@ -163,7 +163,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
   <action name="actionCapture">
    <property name="icon">
     <iconset resource="resources.qrc">
-     <normaloff>:/icons/icons/capture.svg</normaloff>:/icons/icons/capture.svg</iconset>
+     <normaloff>:/icons/icons/captrure_1.svg</normaloff>:/icons/icons/captrure_1.svg</iconset>
    </property>
    <property name="text">
     <string>Capture</string>
@@ -178,7 +178,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
   <action name="actionStop">
    <property name="icon">
     <iconset resource="resources.qrc">
-     <normaloff>:/icons/icons/stop.svg</normaloff>:/icons/icons/stop.svg</iconset>
+     <normaloff>:/icons/icons/stop_1.svg</normaloff>:/icons/icons/stop_1.svg</iconset>
    </property>
    <property name="text">
     <string>Stop</string>
@@ -193,7 +193,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
   <action name="actionExport">
    <property name="icon">
     <iconset resource="resources.qrc">
-     <normaloff>:/icons/icons/export-csv.svg</normaloff>:/icons/icons/export-csv.svg</iconset>
+     <normaloff>:/icons/icons/export-csv_1.svg</normaloff>:/icons/icons/export-csv_1.svg</iconset>
    </property>
    <property name="text">
     <string>Export</string>
@@ -208,7 +208,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
   <action name="actionExportScreenshot">
    <property name="icon">
     <iconset resource="resources.qrc">
-     <normaloff>:/icons/icons/export_screenshot.svg</normaloff>:/icons/icons/export_screenshot.svg</iconset>
+     <normaloff>:/icons/icons/export_screenshot_1.svg</normaloff>:/icons/icons/export_screenshot_1.svg</iconset>
    </property>
    <property name="text">
     <string>Export Screenshot</string>

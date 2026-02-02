@@ -42,11 +42,11 @@ class MainWindow(uiclass, baseclass):
         self.image_item = None
 
         self.setupUi(self)
-        self.actionNew.setIcon(QIcon(resource_path("icons/new.svg")))
-        self.actionCapture.setIcon(QIcon(resource_path("icons/capture.svg")))
-        self.actionStop.setIcon(QIcon(resource_path("icons/stop.svg")))
-        self.actionExport.setIcon(QIcon(resource_path("icons/export-csv.svg")))
-        self.actionExportScreenshot.setIcon(QIcon(resource_path("icons/export_screenshot.svg")))
+        self.actionNew.setIcon(QIcon(resource_path("icons/new_1.svg")))
+        self.actionCapture.setIcon(QIcon(resource_path("icons/capture_1.svg")))
+        self.actionStop.setIcon(QIcon(resource_path("icons/stop_1.svg")))
+        self.actionExport.setIcon(QIcon(resource_path("icons/export-csv_1.svg")))
+        self.actionExportScreenshot.setIcon(QIcon(resource_path("icons/export_screenshot_1.svg")))
         self.bannerFrame.hide()
         self._plot_click_connected = False
         self.clickable_toggle(False)
@@ -60,6 +60,7 @@ class MainWindow(uiclass, baseclass):
         self.scan_results = []
         self.map_scale_markers = []
         self.map_ui_markers = []
+        self.ap_markers = []
         #https://doc.qt.io/qtforpython-6/tutorials/basictutorial/tablewidget.html
         self.tableWidget.setColumnCount(len(UI_COLUMNS))
         self.tableWidget.setHorizontalHeaderLabels(UI_COLUMNS)
@@ -114,6 +115,7 @@ class MainWindow(uiclass, baseclass):
             if key in self.heatmap_items:
                 self.graphWidget.removeItem(self.heatmap_items[key])
                 del self.heatmap_items[key]
+                self.remove_ap_markers()
 
         if any_ssid_checked is False:
             self.bannerFrame.hide()
@@ -127,6 +129,7 @@ class MainWindow(uiclass, baseclass):
          if p.exists():
              p.unlink()
          self._scan_running = True
+
          self.proc.start("lswifi.exe", ["--json", self.temp_json_path])
 
 
@@ -252,6 +255,7 @@ class MainWindow(uiclass, baseclass):
 
         self.scale = None
         self.scan_results.clear()
+        self.remove_colorbar()
         self.latest_scan = []
         self.tableWidget.clearContents()
         self.listSSID.clear()
@@ -415,10 +419,23 @@ class MainWindow(uiclass, baseclass):
             self.graphWidget.removeItem(marker)
         self.map_ui_markers.clear()
 
+    def remove_ap_markers(self):
+        for ap_marker in self.ap_markers:
+            self.graphWidget.removeItem(ap_marker)
+        self.ap_markers.clear()
+
     def remove_map_scale_markers(self):
         for marker in self.map_scale_markers:
             self.graphWidget.removeItem(marker)
         self.map_scale_markers.clear()
+
+    def remove_colorbar(self):
+        if self.colorbar is None:
+            return
+        self.graphWidget.removeItem(self.colorbar)
+        self.colorbar.scene().removeItem(self.colorbar)
+        self.colorbar = None
+    
 
     def image_loaded_state(self):
         self.actionNew.setEnabled(True)
@@ -472,7 +489,15 @@ class MainWindow(uiclass, baseclass):
             self.bannerLabel.setText(f"Not enough data to create heatmap for {key} network")
             self.bannerFrame.show()
             return
+        
+        best_rssi = unique_bssid_results[0]
 
+        for result in unique_bssid_results:
+            if int(result["rssi"]) > int(best_rssi["rssi"]):
+                best_rssi = result
+        ap_x = float(best_rssi["x"])
+        ap_y = float(best_rssi["y"])
+        
         X = []
         Y = []
         X_m = []
@@ -519,6 +544,17 @@ class MainWindow(uiclass, baseclass):
         if self.colorbar is None:
             self.colorbar = pg.ColorBarItem(values=(RSSI_MIN, RSSI_MAX), colorMap=cmap, interactive=False)
             self.colorbar.setImageItem(heatmap_item, insert_in=self.graphWidget.getPlotItem())
+
+        ap_marker = pg.ScatterPlotItem(
+            [ap_x], [ap_y],
+            symbol='o',
+            size=8,
+            pen=pg.mkPen(color='y', width=3),
+            brush=pg.mkBrush(color='y')
+        )
+        
+        self.graphWidget.addItem(ap_marker)
+        self.ap_markers.append(ap_marker)
         self.heatmap_items[key] = heatmap_item
 
     def save_screenshot_dialog(self):
