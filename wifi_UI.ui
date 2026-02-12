@@ -67,10 +67,12 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
     <bool>false</bool>
    </attribute>
    <addaction name="actionNew"/>
+   <addaction name="actionOpenProject"/>
    <addaction name="actionCapture"/>
    <addaction name="actionStop"/>
    <addaction name="actionExport"/>
    <addaction name="actionExportScreenshot"/>
+   <addaction name="actionSaveProject"/>
   </widget>
   <widget class="QDockWidget" name="dockWidgetSSID">
    <property name="minimumSize">
@@ -154,7 +156,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
     <string>New</string>
    </property>
    <property name="toolTip">
-    <string>New project</string>
+    <string>New project (Ctrl+N)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+N</string>
@@ -163,13 +165,13 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
   <action name="actionCapture">
    <property name="icon">
     <iconset resource="resources.qrc">
-     <normaloff>:/icons/icons/captrure_1.svg</normaloff>:/icons/icons/captrure_1.svg</iconset>
+     <normaloff>:/icons/icons/capture_1.svg</normaloff>:/icons/icons/capture_1.svg</iconset>
    </property>
    <property name="text">
     <string>Capture</string>
    </property>
    <property name="toolTip">
-    <string>Start capturing samples</string>
+    <string>Start capturing samples (Ctrl+C)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+C</string>
@@ -184,7 +186,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
     <string>Stop</string>
    </property>
    <property name="toolTip">
-    <string>Stop capturing samples</string>
+    <string>Stop capturing samples (Ctrl+S)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+S</string>
@@ -199,7 +201,7 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
     <string>Export</string>
    </property>
    <property name="toolTip">
-    <string>Export to csv</string>
+    <string>Export to csv (Ctrl+E)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+E</string>
@@ -214,10 +216,40 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
     <string>Export Screenshot</string>
    </property>
    <property name="toolTip">
-    <string>Save screenshot with heatmap and network info</string>
+    <string>Save screenshot (Ctrl+Shift+S)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Shift+S</string>
+   </property>
+  </action>
+  <action name="actionSaveProject">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/icons/save_project.svg</normaloff>:/icons/icons/save_project.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Save Project</string>
+   </property>
+   <property name="toolTip">
+    <string>Save Project (Ctrl+P)</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+P</string>
+   </property>
+  </action>
+  <action name="actionOpenProject">
+   <property name="icon">
+    <iconset resource="resources.qrc">
+     <normaloff>:/icons/icons/open-project.svg</normaloff>:/icons/icons/open-project.svg</iconset>
+   </property>
+   <property name="text">
+    <string>Open Project</string>
+   </property>
+   <property name="toolTip">
+    <string>Open project (Ctrl+O)</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+O</string>
    </property>
   </action>
  </widget>

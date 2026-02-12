@@ -16,6 +16,8 @@ from pathlib import Path
 import csv
 from scipy.interpolate import griddata
 from scipy.ndimage import gaussian_filter
+from zipfile import ZipFile
+
 
 # https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile
 def resource_path(relative_path):
@@ -47,6 +49,8 @@ class MainWindow(uiclass, baseclass):
         self.actionStop.setIcon(QIcon(resource_path("icons/stop_1.svg")))
         self.actionExport.setIcon(QIcon(resource_path("icons/export-csv_1.svg")))
         self.actionExportScreenshot.setIcon(QIcon(resource_path("icons/export_screenshot_1.svg")))
+        self.actionSaveProject.setIcon(QIcon(resource_path("icons/save_project.svg")))
+        self.actionOpenProject.setIcon(QIcon(resource_path("icons/open-project.svg")))
         self.bannerFrame.hide()
         self._plot_click_connected = False
         self.clickable_toggle(False)
@@ -55,6 +59,8 @@ class MainWindow(uiclass, baseclass):
         self.actionExport.triggered.connect(self.save_csv_dialog)
         self.actionExportScreenshot.triggered.connect(self.save_screenshot_dialog)
         self.actionCapture.triggered.connect(self.on_capture_clicked)
+        self.actionSaveProject.triggered.connect(self.save_project_dialog)
+        self.actionOpenProject.triggered.connect(self.import_project)
         self.scan_location_marker = None
         self.settings_window = None
         self.scan_results = []
@@ -124,7 +130,6 @@ class MainWindow(uiclass, baseclass):
          if self._scan_running:
              return
         
-    
          p = Path(self.temp_json_path)
          if p.exists():
              p.unlink()
@@ -238,6 +243,7 @@ class MainWindow(uiclass, baseclass):
             if selected_files:
                 image_path = selected_files[0]
                 self.load_image(image_path)
+                self.current_image_path = image_path
 
 # https://www.geeksforgeeks.org/python/writing-csv-files-in-python/
 # https://stackoverflow.com/questions/12546031/qfiledialoggetsavefilename-and-default-selectedfilter
@@ -251,9 +257,60 @@ class MainWindow(uiclass, baseclass):
                 writer.writeheader()
                 writer.writerows(self.scan_results)
 
-    def load_image(self, file_path):
+# https://stackoverflow.com/questions/15757213/custom-filetype-in-python-3
+# https://www.geeksforgeeks.org/python/json-dump-in-python/
+# https://www.geeksforgeeks.org/python/working-zip-files-python/
 
-        self.scale = None
+    def save_project_dialog(self):
+        filename, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save project", QDir.currentPath(), "WiFi Heatmap project (*.wht)")
+        if not filename:
+            return
+        with ZipFile(filename, "w") as zipref:
+            csv_path = "scan_results.csv"
+            with open(csv_path, 'w', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=CSV_HEADERS)
+                writer.writeheader()
+                writer.writerows(self.scan_results)
+            zipref.write(csv_path)
+            zipref.write(self.current_image_path, "floorplan.png")
+
+            data = {
+                "scale": float(self.scale),
+                "image_file": "floorplan.png"
+            }
+            with open("project.json", "w") as f:
+                json.dump(data, f)
+            zipref.write("project.json")
+
+    def import_project(self):
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open project", QDir.currentPath(), "WiFi Heatmap project (*.wht)")
+        if not filename:
+            return
+        with ZipFile(filename, "r") as zipref:
+            zipref.extractall()
+        with open("project.json", "r") as f:
+            project = json.load(f)
+        image_path = "floorplan.png"
+        self.load_image(image_path, open_scale_window=False)
+        self.scale = project["scale"]
+        with open("scan_results.csv", newline="") as csvfile:
+            reader = csv.DictReader(csvfile)
+            self.scan_results = list(reader)
+        
+        last_bssid = {}
+        for r in self.scan_results:
+            bssid = r.get("bssid")
+            if bssid:
+                last_bssid[bssid] = r
+        self.latest_scan = list(last_bssid.values())
+        self.update_table_from_latest_scan()
+        self.update_list_widget(self.latest_scan)
+        self.initial_actions_state()
+        
+
+    def load_image(self, file_path, open_scale_window=True):
+        if open_scale_window:
+            self.scale = None
         self.scan_results.clear()
         self.remove_colorbar()
         self.latest_scan = []
@@ -291,7 +348,8 @@ class MainWindow(uiclass, baseclass):
             self.image_height_pixels
         ))
         self.image_loaded_state()
-        self.open_settings()
+        if open_scale_window:
+            self.open_settings()
 
         
     def measure_distance(self, event):
@@ -443,6 +501,8 @@ class MainWindow(uiclass, baseclass):
         self.actionStop.setEnabled(False)
         self.actionExport.setEnabled(False)
         self.actionExportScreenshot.setEnabled(False)
+        self.actionSaveProject.setEnabled(False)
+        self.actionOpenProject.setEnabled(False)
 
     def capture_state(self):
         self.actionNew.setEnabled(True)
@@ -450,6 +510,8 @@ class MainWindow(uiclass, baseclass):
         self.actionStop.setEnabled(True)
         self.actionExport.setEnabled(False)
         self.actionExportScreenshot.setEnabled(False)
+        self.actionSaveProject.setEnabled(False)
+        self.actionOpenProject.setEnabled(False)
 
     def initial_actions_state(self):
         self.actionNew.setEnabled(True)
@@ -457,6 +519,8 @@ class MainWindow(uiclass, baseclass):
         self.actionStop.setEnabled(False)
         self.actionExport.setEnabled(False)
         self.actionExportScreenshot.setEnabled(False)
+        self.actionSaveProject.setEnabled(False)
+        self.actionOpenProject.setEnabled(True)
     
     def stopped_state(self):
         self.actionNew.setEnabled(True)
@@ -467,6 +531,8 @@ class MainWindow(uiclass, baseclass):
         self.actionStop.setEnabled(False)
         self.actionExport.setEnabled(bool(self.scan_results))
         self.actionExportScreenshot.setEnabled(True)
+        self.actionSaveProject.setEnabled(True)
+        self.actionOpenProject.setEnabled(True)
 
 # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.griddata.html
     def plot_wifi_heatmap_griddata(self, bssid_list, key):
