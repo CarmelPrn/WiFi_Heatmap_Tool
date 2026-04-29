@@ -68,11 +68,11 @@ font: 8pt &quot;Roboto, Helvetica, Arial, sans-serif&quot;;</string>
    </attribute>
    <addaction name="actionNew"/>
    <addaction name="actionOpenProject"/>
+   <addaction name="actionSaveProject"/>
    <addaction name="actionCapture"/>
    <addaction name="actionStop"/>
    <addaction name="actionExport"/>
    <addaction name="actionExportScreenshot"/>
-   <addaction name="actionSaveProject"/>
   </widget>
   <widget class="QDockWidget" name="dockWidgetSSID">
    <property name="minimumSize">

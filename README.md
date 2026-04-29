@@ -20,9 +20,8 @@ https://www.python.org/downloads/
 ## Projekti struktuur
 
 - `main.py` - Põhiprogramm
-- `map_scale.py` - Ruumiplaani mõõtkava määraminse loogika dialoogaknas
+- `map_scale.py` - Ruumiplaani mõõtkava määramise loogika dialoogaknas
 - `run.bat` - Rakenduse käivitusskript Windowsis
 - `pyproject.toml` - Projekti konfiguratsioonifail
 - `uv.lock` - Lukustatud sõltuvuste versioonid
 - `wifi_UI.ui` `SetMapScale.ui` - Kasutajaliidese failid
-- `resources.rcc`  Qt ressursifail (kasutajaliidese ikoonid)

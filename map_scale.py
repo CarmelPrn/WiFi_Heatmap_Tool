@@ -58,6 +58,7 @@ class SetMapScale(baseclass, uiclass):
         self.parent.disconnect_measure_distance()
         self.parent.scale = None
         self.parent.actionCapture.setEnabled(False)
+        self.parent.actionOpenProject.setEnabled(True)
         for marker in self.parent.map_scale_markers:
             self.parent.graphWidget.removeItem(marker)
         self.parent.map_scale_markers.clear()

@@ -44,6 +44,7 @@ class MainWindow(uiclass, baseclass):
         self.image_item = None
 
         self.setupUi(self)
+        # All icons from https://www.svgrepo.com/
         self.actionNew.setIcon(QIcon(resource_path("icons/new_1.svg")))
         self.actionCapture.setIcon(QIcon(resource_path("icons/capture_1.svg")))
         self.actionStop.setIcon(QIcon(resource_path("icons/stop_1.svg")))
@@ -67,6 +68,7 @@ class MainWindow(uiclass, baseclass):
         self.map_scale_markers = []
         self.map_ui_markers = []
         self.ap_markers = []
+        self.ui_markers_visible = True
         #https://doc.qt.io/qtforpython-6/tutorials/basictutorial/tablewidget.html
         self.tableWidget.setColumnCount(len(UI_COLUMNS))
         self.tableWidget.setHorizontalHeaderLabels(UI_COLUMNS)
@@ -117,11 +119,13 @@ class MainWindow(uiclass, baseclass):
         if item.checkState() == Qt.CheckState.Checked:
             any_ssid_checked = True
             self.plot_wifi_heatmap_griddata(bssid_list=bssid_list, key=key)
+            #self.remove_ui_markers()
         else:
             if key in self.heatmap_items:
                 self.graphWidget.removeItem(self.heatmap_items[key])
                 del self.heatmap_items[key]
                 self.remove_ap_markers()
+                #self.show_ui_markers()
 
         if any_ssid_checked is False:
             self.bannerFrame.hide()
@@ -198,6 +202,7 @@ class MainWindow(uiclass, baseclass):
 
     def on_capture_clicked(self):
         self.scan_results.clear()
+        self.clear_ui_markers()
         self.latest_scan = []
         self.tableWidget.clearContents()
         self.listSSID.clear()
@@ -206,6 +211,8 @@ class MainWindow(uiclass, baseclass):
             self.graphWidget.removeItem(i)
         self.heatmap_items.clear()
         self.colorbar = None
+        self.remove_ui_markers()
+        self.ui_markers_visible = False
         self.bannerLabel.setText("Click on your current location to start collecting data.\n" "Wi-Fi scan updates every 3 seconds.")
         self.bannerFrame.show()
         self.capture_state()
@@ -220,7 +227,8 @@ class MainWindow(uiclass, baseclass):
         self.bannerFrame.hide()
         self.statusBar().showMessage(f"Scan stopped")
         self.stopped_state()
-        self.remove_ui_markers()
+        self.show_ui_markers()
+        self.ui_markers_visible = True
 
 
         try:
@@ -276,7 +284,8 @@ class MainWindow(uiclass, baseclass):
 
             data = {
                 "scale": float(self.scale),
-                "image_file": "floorplan.png"
+                "image_file": "floorplan.png",
+                "ui_markers_visible": self.ui_markers_visible
             }
             with open("project.json", "w") as f:
                 json.dump(data, f)
@@ -296,6 +305,12 @@ class MainWindow(uiclass, baseclass):
         with open("scan_results.csv", newline="") as csvfile:
             reader = csv.DictReader(csvfile)
             self.scan_results = list(reader)
+            self.build_map_ui_markers_from_scan_results()
+            self.ui_markers_visible = project.get("ui_markers_visible", True)
+            if self.ui_markers_visible:
+                self.show_ui_markers()
+            else:
+                self.remove_ui_markers()
         
         last_bssid = {}
         for r in self.scan_results:
@@ -322,7 +337,7 @@ class MainWindow(uiclass, baseclass):
             self.graphWidget.removeItem(i)
         self.heatmap_items.clear()
         self.colorbar = None
-        self.remove_ui_markers()
+        self.clear_ui_markers()
 
         for m in self.map_scale_markers:
             self.graphWidget.removeItem(m)
@@ -427,6 +442,21 @@ class MainWindow(uiclass, baseclass):
                    if key in CSV_HEADERS} for result in results]
 
         self.scan_results.extend(results)
+    
+    def build_map_ui_markers_from_scan_results(self):
+        self.clear_ui_markers()
+        for m in self.scan_results:
+            x = float(m.get("x"))
+            y = float(m.get("y"))
+            marker = pg.ScatterPlotItem(
+            [x], [y],
+            symbol='x',
+            size=20,
+            pen=pg.mkPen(color='r', width=3),
+            brush=pg.mkBrush(color='r')
+        )
+            self.graphWidget.addItem(marker)
+            self.map_ui_markers.append(marker)
         
 
     def update_list_widget(self, results):
@@ -475,7 +505,17 @@ class MainWindow(uiclass, baseclass):
     def remove_ui_markers(self):
         for marker in self.map_ui_markers:
             self.graphWidget.removeItem(marker)
+
+    def clear_ui_markers(self):
+        for marker in self.map_ui_markers:
+            self.graphWidget.removeItem(marker)
         self.map_ui_markers.clear()
+
+    def show_ui_markers(self):
+        for marker in self.map_ui_markers:
+            if marker.scene() is None:
+                self.graphWidget.addItem(marker)
+
 
     def remove_ap_markers(self):
         for ap_marker in self.ap_markers:
@@ -536,8 +576,10 @@ class MainWindow(uiclass, baseclass):
 
 # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.griddata.html
     def plot_wifi_heatmap_griddata(self, bssid_list, key):
-        self.remove_ui_markers()
+        #self.remove_ui_markers()
         self.bannerFrame.hide()
+        self.bannerLabel.setText(f"Yellow marker(s) show estimated access point locations and may not match the exact physical position")
+        self.bannerFrame.show()
         unique_bssid_results = []
 
         grid_scale = 200
