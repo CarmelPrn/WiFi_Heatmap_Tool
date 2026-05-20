@@ -17,7 +17,7 @@ https://www.python.org/downloads/
 ## Rakenduse käivitamine
 1. Lae alla ja paki lahti projekti kaust
 2. Installi `lswifi` käsuga `python -m pip install -U lswifi`
-3. Leia `lswifi.exe` asukoht Pythoni `Scripts` kaustas käsuga `where lswifi`
+3. Leia `lswifi.exe` asukoht Pythoni `Scripts` kaustas käsuga `where lswifi` või `python -m pip show lswifi`
 4. Navigeeri antud asukohta, kopeeri `lswifi.exe` ja pane see `WiFi Heatmap Tool` kausta `WiFi Heatmap Tool.exe` kõrvale
 
 ## Projekti struktuur
@@ -29,3 +29,7 @@ https://www.python.org/downloads/
 - `wifi_UI.ui` `SetMapScale.ui` - Kasutajaliidese failid
 - `icons/` - Rakenduses kasutatavad ikoonid
 - `WiFi Heatmap Tool/` - Kaust rakenduse käivitatava failiga
+
+## Ülevaade rakenduse kasutajaliidesest
+
+![Ülevaade rakenduse kasutajaliidesest](icons/UI.png)
