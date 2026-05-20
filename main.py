@@ -28,6 +28,8 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
+
+
 ui_path = resource_path("wifi_UI.ui")
 # https://www.pythonguis.com/tutorials/pyside6-embed-pyqtgraph-custom-widgets/
 uiclass, baseclass = pg.Qt.loadUiType(ui_path)
@@ -578,7 +580,7 @@ class MainWindow(uiclass, baseclass):
     def plot_wifi_heatmap_griddata(self, bssid_list, key):
         #self.remove_ui_markers()
         self.bannerFrame.hide()
-        self.bannerLabel.setText(f"Yellow marker(s) show estimated access point locations and may not match the exact physical position")
+        self.bannerLabel.setText(f"Yellow marker shows estimated access point location and may not match the exact physical position")
         self.bannerFrame.show()
         unique_bssid_results = []
 
