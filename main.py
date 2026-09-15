@@ -28,6 +28,10 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
+def app_base_path(): #####################
+    if getattr(sys, "frozen", False): ###########################
+        return Path(sys.executable).resolve().parent #######################
+    return Path(__file__).resolve().parent ########################
 
 
 ui_path = resource_path("wifi_UI.ui")
@@ -41,8 +45,10 @@ class MainWindow(uiclass, baseclass):
 
     def __init__(self):
         super().__init__()
-        base_dir = Path(__file__).resolve().parent
+        #base_dir = Path(__file__).resolve().parent 
+        base_dir = app_base_path()
         self.temp_json_path = str((base_dir / "temp.json").resolve())
+        self.lswifi_path = str((base_dir / "lswifi.exe").resolve())
         self.image_item = None
 
         self.setupUi(self)
@@ -69,7 +75,8 @@ class MainWindow(uiclass, baseclass):
         self.scan_results = []
         self.map_scale_markers = []
         self.map_ui_markers = []
-        self.ap_markers = []
+        self.ap_markers = {}
+        self.no_heatmap_networks = set()
         self.ui_markers_visible = True
         #https://doc.qt.io/qtforpython-6/tutorials/basictutorial/tablewidget.html
         self.tableWidget.setColumnCount(len(UI_COLUMNS))
@@ -90,6 +97,11 @@ class MainWindow(uiclass, baseclass):
         self.proc = QProcess(self) # käivitab lswifi
         self.proc.setWorkingDirectory(str(base_dir)) 
         self.proc.finished.connect(self.on_scan_finished)
+        
+        self.scan_timeout_timer = QTimer(self)
+        self.scan_timeout_timer.setSingleShot(True)
+        self.scan_timeout_timer.setInterval(10000)
+        self.scan_timeout_timer.timeout.connect(self.on_scan_timeout)
 
         self.timer = QTimer()
         self.timer.setInterval(3000)
@@ -104,6 +116,8 @@ class MainWindow(uiclass, baseclass):
         self.colorbar = None
 
     def closeEvent(self, event):
+        if self.settings_window is not None:
+            self.settings_window.close()
         try:
             if self.proc is not None and self.proc.state() != QProcess.ProcessState.NotRunning:
                 self.proc.kill()
@@ -113,24 +127,25 @@ class MainWindow(uiclass, baseclass):
         super().closeEvent(event)
 
     def list_changed(self, item):
-        any_ssid_checked = False
+        #any_ssid_checked = False
         if self._scan_running:
             return
         bssid_list = item.data(Qt.ItemDataRole.UserRole)
         key = item.text()
         if item.checkState() == Qt.CheckState.Checked:
-            any_ssid_checked = True
+            #any_ssid_checked = True
             self.plot_wifi_heatmap_griddata(bssid_list=bssid_list, key=key)
             #self.remove_ui_markers()
         else:
             if key in self.heatmap_items:
                 self.graphWidget.removeItem(self.heatmap_items[key])
                 del self.heatmap_items[key]
-                self.remove_ap_markers()
+            self.remove_ap_markers(key)
                 #self.show_ui_markers()
-
-        if any_ssid_checked is False:
-            self.bannerFrame.hide()
+            self.no_heatmap_networks.discard(key)
+        #if any_ssid_checked is False:
+            #self.bannerFrame.hide()
+        self.update_banner()
 
     def passive_wifi_scan(self):
          if self._scan_running:
@@ -139,14 +154,25 @@ class MainWindow(uiclass, baseclass):
          p = Path(self.temp_json_path)
          if p.exists():
              p.unlink()
+
+         if not Path(self.lswifi_path).exists():
+            self._scan_running = False
+            self.bannerLabel.setText("lswifi.exe was not found. Make sure lswifi.exe is in the application folder.")
+            self.bannerFrame.show()
+            return
          self._scan_running = True
 
-         self.proc.start("lswifi.exe", ["--json", self.temp_json_path])
+         self.proc.start(self.lswifi_path, ["--json", self.temp_json_path])
+
+         self.scan_timeout_timer.start()
 
 
     def on_scan_finished(self):
+        self.scan_timeout_timer.stop()
         self._scan_running = False
+
         p = Path(self.temp_json_path)
+
         if not p.exists():
             return
         
@@ -160,6 +186,13 @@ class MainWindow(uiclass, baseclass):
         self.latest_scan = scan_data
         self.update_table_from_latest_scan()
         self.update_list_widget(scan_data)
+    
+    def on_scan_timeout(self):
+        if self.proc.state() != QProcess.ProcessState.NotRunning:
+            self.proc.kill()
+            self.proc.waitForFinished(1000)
+        self._scan_running = False
+
 
     def update_table_from_latest_scan(self):
         results = self.latest_scan
@@ -207,11 +240,18 @@ class MainWindow(uiclass, baseclass):
         self.clear_ui_markers()
         self.latest_scan = []
         self.tableWidget.clearContents()
+        self.listSSID.setEnabled(False)
         self.listSSID.clear()
         self.bannerFrame.hide()
         for i in self.heatmap_items.values():
             self.graphWidget.removeItem(i)
         self.heatmap_items.clear()
+        for markers in self.ap_markers.values():
+            for marker in markers:
+                self.graphWidget.removeItem(marker)
+        self.ap_markers.clear()
+        self.no_heatmap_networks.clear()
+        self.remove_colorbar()
         self.colorbar = None
         self.remove_ui_markers()
         self.ui_markers_visible = False
@@ -226,6 +266,7 @@ class MainWindow(uiclass, baseclass):
     def on_stop_clicked(self):
         self.timer.stop()
         self.clickable_toggle(False)
+        self.listSSID.setEnabled(True)
         self.bannerFrame.hide()
         self.statusBar().showMessage(f"Scan stopped")
         self.stopped_state()
@@ -477,12 +518,18 @@ class MainWindow(uiclass, baseclass):
 
             networks.setdefault(text, []).append(bssid)
 
-        for text, bssid in networks.items():
-            if not self.listSSID.findItems(text, Qt.MatchFlag.MatchFixedString | Qt.MatchFlag.MatchCaseSensitive):
+        for text, bssids in networks.items():
+            existing_items = self.listSSID.findItems(text, Qt.MatchFlag.MatchFixedString | Qt.MatchFlag.MatchCaseSensitive)
+            if existing_items:
+                item_ssid = existing_items[0]
+                old_bssids = item_ssid.data(Qt.ItemDataRole.UserRole) or []
+                combined_bssids = list(set(old_bssids + bssids))
+                item_ssid.setData(Qt.ItemDataRole.UserRole, combined_bssids)
+            else:
                 item_ssid = QListWidgetItem(text)
                 item_ssid.setFlags(item_ssid.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item_ssid.setCheckState(Qt.CheckState.Unchecked)
-                item_ssid.setData(Qt.ItemDataRole.UserRole, bssid)
+                item_ssid.setData(Qt.ItemDataRole.UserRole, bssids)
                 self.listSSID.addItem(item_ssid)
 
         self.listSSID.blockSignals(False)
@@ -519,10 +566,26 @@ class MainWindow(uiclass, baseclass):
                 self.graphWidget.addItem(marker)
 
 
-    def remove_ap_markers(self):
-        for ap_marker in self.ap_markers:
-            self.graphWidget.removeItem(ap_marker)
-        self.ap_markers.clear()
+    def remove_ap_markers(self, key):
+        if key in self.ap_markers:
+            for ap_marker in self.ap_markers[key]:
+                self.graphWidget.removeItem(ap_marker)
+            del self.ap_markers[key]
+
+    def update_banner(self):
+        messages = []
+
+        if self.no_heatmap_networks:
+            for key in self.no_heatmap_networks:
+                messages.append(f"Not enough data to create heatmap for {key} network")
+
+        if self.heatmap_items:
+            messages.append("Yellow marker(s) show estimated access point location and may not match the exact physical position")        
+        if messages:
+            self.bannerLabel.setText("\n".join(messages))
+            self.bannerFrame.show()
+        else:
+            self.bannerFrame.hide()
 
     def remove_map_scale_markers(self):
         for marker in self.map_scale_markers:
@@ -579,9 +642,9 @@ class MainWindow(uiclass, baseclass):
 # https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.griddata.html
     def plot_wifi_heatmap_griddata(self, bssid_list, key):
         #self.remove_ui_markers()
-        self.bannerFrame.hide()
-        self.bannerLabel.setText(f"Yellow marker shows estimated access point location and may not match the exact physical position")
-        self.bannerFrame.show()
+        #self.bannerFrame.hide()
+        #self.bannerLabel.setText(f"Yellow marker shows estimated access point location and may not match the exact physical position")
+        #self.bannerFrame.show()
         unique_bssid_results = []
 
         grid_scale = 200
@@ -596,17 +659,21 @@ class MainWindow(uiclass, baseclass):
                 unique_bssid_results.append(result)
 
         if not self.scan_results or len(unique_bssid_results) < 3:
-            self.bannerLabel.setText(f"Not enough data to create heatmap for {key} network")
-            self.bannerFrame.show()
+            self.no_heatmap_networks.add(key)
+            self.update_banner()
             return
+        self.no_heatmap_networks.discard(key)
         
-        best_rssi = unique_bssid_results[0]
+        best_rssi_by_bssid = {}
 
         for result in unique_bssid_results:
-            if int(result["rssi"]) > int(best_rssi["rssi"]):
-                best_rssi = result
-        ap_x = float(best_rssi["x"])
-        ap_y = float(best_rssi["y"])
+            bssid = result.get("bssid")
+
+            if not bssid:
+                continue
+            
+            if (bssid not in best_rssi_by_bssid or int(result["rssi"]) > int(best_rssi_by_bssid[bssid]["rssi"])):
+                best_rssi_by_bssid[bssid] = result
         
         X = []
         Y = []
@@ -649,23 +716,32 @@ class MainWindow(uiclass, baseclass):
         heatmap_item.setOpacity(0.5)
 
         self.graphWidget.addItem(heatmap_item)
+        self.heatmap_items[key] = heatmap_item
         # https://pyqtgraph.readthedocs.io/en/pyqtgraph-0.13.0/colormap.html
 
         if self.colorbar is None:
             self.colorbar = pg.ColorBarItem(values=(RSSI_MIN, RSSI_MAX), colorMap=cmap, interactive=False)
             self.colorbar.setImageItem(heatmap_item, insert_in=self.graphWidget.getPlotItem())
 
-        ap_marker = pg.ScatterPlotItem(
-            [ap_x], [ap_y],
-            symbol='o',
-            size=8,
-            pen=pg.mkPen(color='y', width=3),
-            brush=pg.mkBrush(color='y')
-        )
+        if key in self.ap_markers:
+            self.remove_ap_markers(key)
+
+        self.ap_markers[key] = []
+
+        for best_rssi in best_rssi_by_bssid.values():
+            ap_x = float(best_rssi["x"])
+            ap_y = float(best_rssi["y"])
+
+            ap_marker = pg.ScatterPlotItem(
+                [ap_x], [ap_y],
+                symbol = 'o',
+                size=8,
+                pen=pg.mkPen(color='y', width=3),
+                brush=pg.mkBrush(color='y')
+            )
+            self.graphWidget.addItem(ap_marker)
+            self.ap_markers[key].append(ap_marker)
         
-        self.graphWidget.addItem(ap_marker)
-        self.ap_markers.append(ap_marker)
-        self.heatmap_items[key] = heatmap_item
 
     def save_screenshot_dialog(self):
         filename, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save screenshot", QDir.currentPath(), "Image files (*.png *.jpg)")

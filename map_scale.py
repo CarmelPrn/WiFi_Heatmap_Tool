@@ -18,7 +18,7 @@ uiclass, baseclass = pg.Qt.loadUiType(ui_path)
 
 class SetMapScale(baseclass, uiclass):
     def __init__(self, parent):
-        super().__init__()
+        super().__init__(parent)
         self.setupUi(self)
         self.parent = parent
         self.LengthInMeters.valueChanged.connect(self.set_scale)
