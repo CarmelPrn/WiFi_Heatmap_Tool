@@ -20,12 +20,10 @@ class SetMapScale(baseclass, uiclass):
     def __init__(self, parent):
         super().__init__(parent)
         self.setupUi(self)
-        self.parent = parent
+        self.main_window = parent
         self.LengthInMeters.valueChanged.connect(self.set_scale)
         self.LengthInPixels.valueChanged.connect(self.set_scale)
         # https://www.pythonguis.com/tutorials/pyqt6-dialogs/
-        QBtn = (QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        self.buttonBox = QDialogButtonBox(QBtn)
         self.buttonBox.accepted.connect(self.accept)
         self.buttonBox.rejected.connect(self.reject)
 
@@ -38,30 +36,37 @@ class SetMapScale(baseclass, uiclass):
         self.Scale.setValue(meters / pixels)
 
     def accept(self):
-        if len(self.parent.map_scale_markers) < 2:
+        if len(self.main_window.map_scale_markers) < 2:
             self.Scale.setValue(0)
             return
-        if self.LengthInPixels.value() <= 0:
+
+        meters = self.LengthInMeters.value()
+        pixels = self.LengthInPixels.value()
+
+        if meters <= 0 or pixels <= 0:
             return
         
-        self.parent.scale = self.Scale.value()
-        self.parent.actionCapture.setEnabled(True)
-        self.parent.disconnect_measure_distance()
-        for marker in self.parent.map_scale_markers:
-            self.parent.graphWidget.removeItem(marker)
-        self.parent.map_scale_markers.clear()
+        self.main_window.scale = float(meters) / float(pixels)
+        self.main_window.actionCapture.setEnabled(True)
+        self.main_window.actionNew.setEnabled(True)
+        self.main_window.actionOpenProject.setEnabled(True)
+        self.main_window.disconnect_measure_distance()
+        self.main_window.remove_map_scale_markers()
+        for marker in self.main_window.map_scale_markers:
+            self.main_window.graphWidget.removeItem(marker)
+        self.main_window.map_scale_markers.clear()
         super().accept()
 
 
     def reject(self):
 
-        self.parent.disconnect_measure_distance()
-        self.parent.scale = None
-        self.parent.actionCapture.setEnabled(False)
-        self.parent.actionOpenProject.setEnabled(True)
-        for marker in self.parent.map_scale_markers:
-            self.parent.graphWidget.removeItem(marker)
-        self.parent.map_scale_markers.clear()
+        self.main_window.disconnect_measure_distance()
+        self.main_window.scale = None
+        self.main_window.actionCapture.setEnabled(False)
+        self.main_window.actionOpenProject.setEnabled(True)
+        for marker in self.main_window.map_scale_markers:
+            self.main_window.graphWidget.removeItem(marker)
+        self.main_window.map_scale_markers.clear()
         super().reject()
 
 

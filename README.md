@@ -17,7 +17,7 @@ https://www.python.org/downloads/
 ## Rakenduse käivitamine
 1. Lae alla ja paki lahti projekti kaust
 2. Installi `lswifi` käsuga `python -m pip install -U lswifi`
-3. Leia `lswifi.exe` asukoht Pythoni `Scripts` kaustas käsuga `where lswifi` või `python -m pip show lswifi`
+3. Leia `lswifi.exe` asukoht Pythoni `Scripts` kaustas käsuga `python -m pip show lswifi`. Mine sellest kaks taset üles `pythoncore-X.XX-XX` kausta ning ava seal `Scripts` kaust. Näiteks kui `Location:` on `C:\Users\Tu Deng\AppData\Local\Python\pythoncore-3.15-64\Lib\site-packages`, siis `Scripts` kaust asub `C:\Users\Tu Deng\AppData\Local\Python\pythoncore-3.15-64\Scripts`      
 4. Navigeeri antud asukohta, kopeeri `lswifi.exe` ja pane see `WiFi Heatmap Tool` kausta `WiFi Heatmap Tool.exe` kõrvale
 
 ## Projekti struktuur

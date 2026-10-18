@@ -186,6 +186,9 @@ class MainWindow(uiclass, baseclass):
         self.latest_scan = scan_data
         self.update_table_from_latest_scan()
         self.update_list_widget(scan_data)
+
+        if scan_data and self.timer.isActive():
+            self.statusBar().showMessage(f"Scan started")
     
     def on_scan_timeout(self):
         if self.proc.state() != QProcess.ProcessState.NotRunning:
@@ -219,7 +222,9 @@ class MainWindow(uiclass, baseclass):
 
 
     def open_settings(self):
-
+        self.actionNew.setEnabled(False)
+        self.actionOpenProject.setEnabled(False)
+        self.actionCapture.setEnabled(False)
         self.clickable_toggle(False)
         self.settings_window = SetMapScale(self)
         self.settings_window.setWindowModality(Qt.WindowModality.NonModal)
@@ -303,7 +308,7 @@ class MainWindow(uiclass, baseclass):
     def save_csv_dialog(self):
         filename, filter = QtWidgets.QFileDialog.getSaveFileName(self, "Save file", QDir.currentPath(), "All Files (*);; CSV Files (*.csv)")
         if filename and self.scan_results:
-            with open(filename, 'w', newline='') as csvfile:
+            with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=CSV_HEADERS)
                 writer.writeheader()
                 writer.writerows(self.scan_results)
@@ -318,7 +323,7 @@ class MainWindow(uiclass, baseclass):
             return
         with ZipFile(filename, "w") as zipref:
             csv_path = "scan_results.csv"
-            with open(csv_path, 'w', newline='') as csvfile:
+            with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=CSV_HEADERS)
                 writer.writeheader()
                 writer.writerows(self.scan_results)
@@ -344,6 +349,7 @@ class MainWindow(uiclass, baseclass):
             project = json.load(f)
         image_path = "floorplan.png"
         self.load_image(image_path, open_scale_window=False)
+        self.current_image_path = image_path
         self.scale = project["scale"]
         with open("scan_results.csv", newline="") as csvfile:
             reader = csv.DictReader(csvfile)
@@ -385,6 +391,12 @@ class MainWindow(uiclass, baseclass):
         for m in self.map_scale_markers:
             self.graphWidget.removeItem(m)
         self.map_scale_markers.clear()
+
+        for markers in self.ap_markers.values():
+            for marker in markers:
+                self.graphWidget.removeItem(marker)
+        self.ap_markers.clear()
+        self.no_heatmap_networks.clear()
 
         img = Image.open(file_path).convert("RGB")
         self.image_array = np.array(img)
@@ -465,7 +477,25 @@ class MainWindow(uiclass, baseclass):
         self.update_scan_location_marker()
 
     def update_scan_location_marker(self):
+        
+        results = getattr(self, "latest_scan", [])
+
+        if not results:
+            self.statusBar().showMessage("Wi-Fi scan results are not available yet", 3000)
+            return
+        
+        if isinstance(results, dict): 
+            results = [results]
+
         x, y = self.scan_location
+
+        results = [{"x": x, "y": y, **r} for r in results]
+        results = [{key : val for key, val in result.items()
+                   if key in CSV_HEADERS} for result in results]
+        
+        if not results:
+            return
+        
         self.scan_location_marker = pg.ScatterPlotItem(
             [x], [y],
             symbol='x',
@@ -475,22 +505,23 @@ class MainWindow(uiclass, baseclass):
         )
         self.graphWidget.addItem(self.scan_location_marker)
         self.map_ui_markers.append(self.scan_location_marker)
-        results = getattr(self, "latest_scan", [])
-
-        if isinstance(results, dict): 
-            results = [results]
-
-        results = [{"x": x, "y": y, **r} for r in results]
-        results = [{key : val for key, val in result.items()
-                   if key in CSV_HEADERS} for result in results]
 
         self.scan_results.extend(results)
     
     def build_map_ui_markers_from_scan_results(self):
         self.clear_ui_markers()
+        seen_positions = set()
+
         for m in self.scan_results:
             x = float(m.get("x"))
             y = float(m.get("y"))
+            position = (x, y)
+
+            if position in seen_positions:
+                continue
+
+            seen_positions.add(position)
+
             marker = pg.ScatterPlotItem(
             [x], [y],
             symbol='x',
@@ -511,10 +542,16 @@ class MainWindow(uiclass, baseclass):
         # https://forum.qt.io/topic/113710/remove-duplicate-entries-from-qlistwidget?_=1766934140002
         networks = {}
         for result in results:
-            ssid = result.get("ssid", "") or "hidden"
+            #ssid = result.get("ssid", "") or "hidden"
+            ssid = result.get("ssid", "")
             frequency = self.convert_frequency(frequency=result.get("channel_frequency"))
             bssid = result.get("bssid")
-            text = f"{ssid} {frequency}"
+            if not bssid:
+                continue
+            if ssid:
+                text = f"{ssid} {frequency}"
+            else:
+                text = f"hidden ({bssid}) {frequency}"
 
             networks.setdefault(text, []).append(bssid)
 
@@ -610,7 +647,7 @@ class MainWindow(uiclass, baseclass):
         self.actionOpenProject.setEnabled(False)
 
     def capture_state(self):
-        self.actionNew.setEnabled(True)
+        self.actionNew.setEnabled(False)
         self.actionCapture.setEnabled(False)
         self.actionStop.setEnabled(True)
         self.actionExport.setEnabled(False)
@@ -645,7 +682,7 @@ class MainWindow(uiclass, baseclass):
         #self.bannerFrame.hide()
         #self.bannerLabel.setText(f"Yellow marker shows estimated access point location and may not match the exact physical position")
         #self.bannerFrame.show()
-        unique_bssid_results = []
+        #unique_bssid_results = []
 
         grid_scale = 200
         X_grid = np.linspace(0, self.image_width_pixels * self.scale, grid_scale)
@@ -653,45 +690,44 @@ class MainWindow(uiclass, baseclass):
 
         X_grid, Y_grid = np.meshgrid(X_grid, Y_grid)
 
-
+        best_rssi_by_position ={} 
+        best_rssi_by_bssid = {}
         for result in self.scan_results:
-            if result.get('bssid') in bssid_list:
-                unique_bssid_results.append(result)
+            bssid = result.get("bssid")
 
-        if not self.scan_results or len(unique_bssid_results) < 3:
+            if bssid not in bssid_list:
+                continue
+            try:
+                x = float(result.get("x"))
+                y = float(result.get("y"))
+                rssi = int(result.get("rssi"))
+            except (TypeError, ValueError):
+                continue
+
+            position = (x,y)
+
+            if (position not in best_rssi_by_position or rssi > best_rssi_by_position[position]):
+                best_rssi_by_position[position] = rssi
+
+            if (bssid not in best_rssi_by_bssid or rssi> int(best_rssi_by_bssid[bssid]["rssi"])):
+                best_rssi_by_bssid[bssid] = result
+
+        if len(best_rssi_by_position) < 3:
             self.no_heatmap_networks.add(key)
             self.update_banner()
             return
+
         self.no_heatmap_networks.discard(key)
         
-        best_rssi_by_bssid = {}
-
-        for result in unique_bssid_results:
-            bssid = result.get("bssid")
-
-            if not bssid:
-                continue
-            
-            if (bssid not in best_rssi_by_bssid or int(result["rssi"]) > int(best_rssi_by_bssid[bssid]["rssi"])):
-                best_rssi_by_bssid[bssid] = result
-        
-        X = []
-        Y = []
+        #X = []
+        #Y = []
         X_m = []
         Y_m = []
         rssi_values = []
-        for result in unique_bssid_results:
-            x = float(result.get('x'))
-            y = float(result.get('y'))
-            rssi = int(result.get('rssi'))
-            scale = self.scale
-            X_meters = x * scale
-            Y_meters = y * scale
-
-            X.append(x)
-            Y.append(y)
-            X_m.append(X_meters)
-            Y_m.append(Y_meters)
+        for position, rssi in best_rssi_by_position.items():
+            x, y = position
+            X_m.append(x * self.scale)
+            Y_m.append(y * self.scale)
             rssi_values.append(rssi)
         
     # https://numpy.org/doc/stable/reference/generated/numpy.column_stack.html
